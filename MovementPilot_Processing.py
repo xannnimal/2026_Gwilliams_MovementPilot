@@ -216,6 +216,7 @@ def calculate_snr(signal, noise):
 if __name__ == '__main__':
     ## define raw file directory and raw file names
     sample_dir = '/Users/alexandria/Documents/STANFORD/DATA/2026_Gwilliams_MovementPilot/NoTask'
+    subjects = ['sub-S027','sub-S026']
     sample_files = ['sub-S027/sub-S027_file-Listening_raw.fif',
                     'sub-S027/sub-S027_file-ArmsRaisingAlternate_raw.fif',
                     'sub-S027/sub-S027_file-ArmsRaisingTogether_raw.fif',
@@ -223,9 +224,11 @@ if __name__ == '__main__':
                     'sub-S027/sub-S027_file-FootTapping_raw.fif',
                     'sub-S027/sub-S027_file-EyeBlink_raw.fif',
                     'sub-S027/sub-S027_file-JawMovement_raw.fif']
-    
+
     
     ##-- define constants -----------------------------------------------
+    compare_prepross=False
+    
     n_trials = len(sample_files)
     trigger_chan = 'di2'  
     tmin = -0.1
@@ -241,16 +244,19 @@ if __name__ == '__main__':
         time_unit="s",
         vlim=(-500,500)
     )
-    baseline=(None,0)
+    baseline=None
     
     freq_min = None
     freq_max = 100
     
     ## -- Look at data + try some preprocessing to clean it -------------------
+    raws =[]
+    tasks =[]
     for file in sample_files:
         raw = mne.io.read_raw_fif(os.path.join(sample_dir, file),preload=False, allow_maxshield='no')
         subject = file[4:8]
         task = file[23:]
+        tasks.append(task)
         
         #find any NaN channels
         bads_list=[]
@@ -263,29 +269,40 @@ if __name__ == '__main__':
         #drop bad channels
         raw.drop_channels(bads)
 
-        
         ## high and low - pass, notch filter raw data--------------------------
         raw.load_data().filter(l_freq=freq_min, h_freq=None)
         raw.load_data().filter(l_freq=None, h_freq=freq_max)
+        meg_picks = mne.pick_types(raw.info, meg=True)
+        #raw.notch_filter(freqs=60, picks=meg_picks)
+        raws.append(raw)
+        
+        #fig = raw.compute_psd(fmax=freq_max).plot(average=False, amplitude=False, picks="data", exclude="bads")
 
-        ## SSP ----------------------------------------------------------------
-        raw_ssp = ssp_filter(raw)
+
         
-        ## Traditional SSS ----------------------------------------------------
-        raw_sss = sss_prepros(raw)     
-        
-        ## Foster's inverse with traditional SSS ------------------------------
-        # This is my method, not published (yet)
-        raw_fos = fosters_inverse(raw)
-        
-        ## joint plot compare -------------------------------------------------
-        fig, axes = plt.subplots(4, 1, sharey=True, layout="constrained", figsize=(10, 10))
-        for ax, data, title in zip(axes, [raw, raw_ssp, raw_sss,raw_fos], ["Raw Empty Room Data", "SSP Preprocessed","SSS Preprocessed", "Fosters Inverse Preprocessed"]):
-            fig = data.compute_psd(fmax=100).plot(average=True, amplitude=False, picks="data", exclude="bads", axes=ax)
-            ax.set(title=subject+', '+task+', '+title, xlim=(0, 100), ylim=(0,90))
+        if compare_prepross:
+            ## SSP ----------------------------------------------------------------
+            raw_ssp = ssp_filter(raw)
             
+            ## Traditional SSS ----------------------------------------------------
+            raw_sss = sss_prepros(raw)     
             
+            ## Foster's inverse with traditional SSS ------------------------------
+            # This is my method, not published (yet)
+            raw_fos = fosters_inverse(raw)
             
+            ## joint plot compare -------------------------------------------------            
+            fig, axes = plt.subplots(4, 1, sharey=True, layout="constrained", figsize=(10, 10))
+            for ax, data, title in zip(axes, [raw, raw_ssp, raw_sss,raw_fos], ["Raw Empty Room Data", "SSP Preprocessed","SSS Preprocessed", "Fosters Inverse Preprocessed"]):
+                fig = data.compute_psd(fmax=freq_max).plot(average=True, amplitude=False, picks="data", exclude="bads", axes=ax)
+                ax.set(title=subject+', '+task+', '+title, xlim=(0, freq_max), ylim=(0,90))
+                
+## just look at raws for each movement            
+fig, axes = plt.subplots(n_trials, 1, sharey=True, layout="constrained", figsize=(10, 20))
+for ax, raw, task in zip(axes, raws, tasks):
+    fig = raw.compute_psd(fmax=freq_max).plot(average=False, amplitude=False, picks="data", exclude="bads", axes=ax)
+    ax.set(title=subject+', '+task, xlim=(0, freq_max), ylim=(0,90))
+               
             
             
             
